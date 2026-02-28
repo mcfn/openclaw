@@ -1,6 +1,10 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { describe, expect, it } from "vitest";
-import { dropThinkingBlocks, isAssistantMessageWithContent } from "./thinking.js";
+import {
+  downgradeUnsignedThinkingBlocks,
+  dropThinkingBlocks,
+  isAssistantMessageWithContent,
+} from "./thinking.js";
 
 describe("isAssistantMessageWithContent", () => {
   it("accepts assistant messages with array content and rejects others", () => {
@@ -56,5 +60,58 @@ describe("dropThinkingBlocks", () => {
     const result = dropThinkingBlocks(messages);
     const assistant = result[0] as Extract<AgentMessage, { role: "assistant" }>;
     expect(assistant.content).toEqual([{ type: "text", text: "" }]);
+  });
+});
+
+describe("downgradeUnsignedThinkingBlocks", () => {
+  it("downgrades thinking blocks without signatures to text", () => {
+    const messages: AgentMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "internal trace" }],
+      } as unknown as AgentMessage,
+    ];
+
+    const result = downgradeUnsignedThinkingBlocks(messages);
+    const assistant = result[0] as Extract<AgentMessage, { role: "assistant" }>;
+    expect(result).not.toBe(messages);
+    expect(assistant.content).toEqual([{ type: "text", text: "internal trace" }]);
+  });
+
+  it("preserves signed thinking blocks", () => {
+    const messages: AgentMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "internal trace", thinkingSignature: "sig" }],
+      } as unknown as AgentMessage,
+    ];
+
+    const result = downgradeUnsignedThinkingBlocks(messages);
+    expect(result).toBe(messages);
+  });
+
+  it("does not downgrade empty thinking blocks", () => {
+    const messages: AgentMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "" }],
+      } as unknown as AgentMessage,
+    ];
+
+    const result = downgradeUnsignedThinkingBlocks(messages);
+    expect(result).toBe(messages);
+    expect((result[0] as Extract<AgentMessage, { role: "assistant" }>).content).toEqual([
+      { type: "thinking", thinking: "" },
+    ]);
+  });
+
+  it("returns original reference when nothing changed", () => {
+    const messages: AgentMessage[] = [
+      { role: "user", content: "hello" } as AgentMessage,
+      { role: "assistant", content: [{ type: "text", text: "world" }] } as AgentMessage,
+    ];
+
+    const result = downgradeUnsignedThinkingBlocks(messages);
+    expect(result).toBe(messages);
   });
 });
